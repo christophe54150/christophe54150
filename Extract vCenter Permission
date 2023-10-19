@@ -1,0 +1,66 @@
+## VMware vCenter and export path paramters
+$VCServer="s-vmw-md03vcs1.net1.cec.eu.int"
+$ReportExport="/home/vcenter-audit"
+
+## Import Vmware Powershell Module
+Import-Module -Name VMware.VimAutomation.Core
+$list=@("vmw-mwd-vc01.net1.cec.eu.int" ,"vmw-bwd-vc01.net1.cec.eu.int", "vmw-swd-vc01.net1.cec.eu.int", "vmw-cmp-vc01.net1.cec.eu.int", "vmw-cmp-vc02.net1.cec.eu.int", "vmw-cmp-vc03.net1.cec.eu.int" ,"vmw-cmp-vc04.net1.cec.eu.int" ,"vmw-cmp-vc05.net1.cec.eu.int", "vmw-cmp-vc06.net1.cec.eu.int" ,"vmw-cmp-vc07.net1.cec.eu.int", "vmw-cmp-vc08.net1.cec.eu.int" ,"vmw-cop-vc01.net1.cec.eu.int", "vmw-cop-vc03.net1.cec.eu.int", "sp-vmw-vdivc01.welcome.ec.europa.eu")
+
+foreach ( $VCServer in $list)
+{
+
+## VCenter Connection
+connect-VIServer $VCServer -ErrorAction SilentlyContinue -ErrorVariable ErrorProcess;
+if($ErrorProcess){
+    Write-Warning "Error connecting to vCenter Server $VCServer error message below"
+    Write-Warning $Error[0].Exception.Message
+    $Error[0].Exception.Message | Out-File $ReportExport\ConnectionError.txt
+exit
+    }
+
+else
+{
+## Create Blank Array
+$results = @()
+
+## Get Permissions
+$RolesPermissions = Get-VIPermission
+
+foreach ($RolesPermission in $RolesPermissions)
+{
+
+
+Write-Host "checking Permmission $($RolesPermission.Principal)" -ForegroundColor Green
+
+## Get Role
+$Role = (Get-VIRole -Name $RolesPermission.Role)
+
+## Set type
+if ($RolesPermission.IsGroup -eq "True"){
+$Object = "Group"
+ }
+Else{
+$Object = "User"
+    }
+
+## Results Hash table
+$props = @{
+Account = $RolesPermission.Principal
+Assigment = $RolesPermission.Entity
+Role = $RolesPermission.Role
+ObjectType = $Object
+Propagate = $RolesPermission.Propagate
+AssignedPrivilege = $Role.PrivilegeList -join ","
+SystemRole = $Role.IsSystem
+}
+
+## Add Properties To Results Array
+$results += New-Object psobject -Property $props
+}
+
+## Export Results To CSV file
+$results | Select-Object Account,Assigment,Role,ObjectType,Propagate,SystemRole,AssignedPrivilege |
+Export-Csv $ReportExport\$VCServer-PermissionsExport.csv -NoTypeInformation
+}
+Disconnect-VIServer -Confirm:$false
+}
